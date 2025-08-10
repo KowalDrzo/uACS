@@ -5,5 +5,6 @@
 #define SDA_PIN 2
 #define SERVO_1_PIN 3
 #define SERVO_2_PIN 4
+#define BUTTON_PIN 0
 
 #endif
