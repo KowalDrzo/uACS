@@ -8,17 +8,38 @@ void initFs() {
     SPIFFS.begin(true);
 }
 
-void appendDataFile(Frame frame) {
+Frame framesCopy[FRAMES_NUM];
+
+void appendDataFile(Frame *frames) {
 
     file = SPIFFS.open("/FlightData.apg", "a");
 
     char tempDataAscii[200];
-    sprintf(tempDataAscii, "%d;%f;%f;%f;%d;%d;%f;%f;%f;%f\n",
-            frame.time_ms, frame.gyro_x, frame.gyro_y, frame.gyro_z, frame.angle1, frame.angle2,
-            frame.acc_x, frame.acc_y, frame.acc_z, frame.alt);
-    file.write((uint8_t*) tempDataAscii, strlen(tempDataAscii));
+    for (int8_t j = 0; j < FRAMES_NUM; j ++) {
+        framesCopy[j] = frames[j];
+    }
 
     file.close();
+
+    xTaskCreate(saveTask, "Save Task", 32768, NULL, 2, NULL);
+}
+
+void saveTask(void *pvParameter) {
+
+    file = SPIFFS.open("/FlightData.apg", "a");
+
+    char tempDataAscii[200];
+    for (int8_t j = 0; j < FRAMES_NUM; j ++) {
+        sprintf(tempDataAscii, "%d;%f;%f;%f;%d;%d;%f;%f;%f;%f\n",
+                framesCopy[j].time_ms, framesCopy[j].gyro_x, framesCopy[j].gyro_y,
+                framesCopy[j].gyro_z, framesCopy[j].angle1, framesCopy[j].angle2,
+                framesCopy[j].acc_x, framesCopy[j].acc_y, framesCopy[j].acc_z, framesCopy[j].alt);
+        file.write((uint8_t*) tempDataAscii, strlen(tempDataAscii));
+    }
+
+    file.close();
+
+    vTaskDelete(NULL);
 }
 
 void clearDataFile() {

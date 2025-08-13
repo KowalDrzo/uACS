@@ -21,7 +21,7 @@ sensors_event_t event;
 Adafruit_ADXL345_Unified accel;
 
 Servo servo1, servo2;
-Frame frame;
+Frame frames[FRAMES_NUM];
 
 PID pid(0.035, 0.002, 0.001);
 Filter filterX(0.2);
@@ -36,17 +36,11 @@ void setup() {
     Serial.begin(115200);
     delay(3000);
 
-    Serial.println("Dupa1");
-    Wire.begin(SDA_PIN, SCL_PIN);
-    Serial.println("Dupa2");
-    bmp.begin(3);
-    Serial.println("Dupa7");
+    Wire.begin(SDA_PIN, SCL_PIN, 400000);
+    bmp.begin(1);
     Serial.println(bmp.readPressure());
-    Serial.println("Dupa3");
     gyro.initialize();
-    Serial.println("Dupa4");
     gyro.testConnection();
-    Serial.println("Dupa6");
     accel.begin();
     accel.setRange(ADXL345_RANGE_16_G);
 
@@ -66,12 +60,14 @@ void setup() {
     timer = millis();
 }
 
+int8_t j = 0;
+
 void loop() {
 
     if (millis() - timer >= 50) {
 
         timer = millis();
-        frame.time_ms = timer;
+        frames[j].time_ms = timer;
 
         float tableX[3];
         float tableY[3];
@@ -83,7 +79,14 @@ void loop() {
             tableX[i] = gx;
             tableY[i] = gy;
             tableZ[i] = gz;
-            tablePress[i] = 101325;//bmp.readPressure();
+            tablePress[i] = initialPressure;
+        }
+        if (j == 0) {
+            uint32_t timer_save = millis();
+            tablePress[0] = bmp.readPressure();
+            tablePress[1] = tablePress[0];
+            tablePress[2] = tablePress[0];
+            Serial.println(millis() - timer_save);
         }
 
         // Filtrowanie:
@@ -97,10 +100,10 @@ void loop() {
         gy /= 14.375;
         gz /= 14.375;
 
-        frame.gyro_x = gx;
-        frame.gyro_y = gy;
-        frame.gyro_z = gz;
-        frame.alt = (initialTemperature+273.15)/0.0065*(1.0 - pow(press/initialPressure, 0.1903));
+        frames[j].gyro_x = gx;
+        frames[j].gyro_y = gy;
+        frames[j].gyro_z = gz;
+        frames[j].alt = (initialTemperature+273.15)/0.0065*(1.0 - pow(press/initialPressure, 0.1903));
 
         if (gy > -100 && gy < 100) gy = 0;
 
@@ -119,17 +122,18 @@ void loop() {
         servo1.write(angle);
         servo2.write(angle);
 
-        frame.angle1 = angle;
-        frame.angle2 = angle;
+        frames[j].angle1 = angle;
+        frames[j].angle2 = angle;
 
         accel.getEvent(&event);
-        frame.acc_x = event.acceleration.x;
-        frame.acc_y = event.acceleration.y;
-        frame.acc_z = event.acceleration.z;
+        frames[j].acc_x = event.acceleration.x;
+        frames[j].acc_y = event.acceleration.y;
+        frames[j].acc_z = event.acceleration.z;
 
-        uint32_t timer_save = millis();
-        appendDataFile(frame);
-        Serial.println(millis() - timer_save);
+        if (j >= FRAMES_NUM - 1) appendDataFile(frames);
+
+        j++;
+        if (j >= FRAMES_NUM) j = 0;
     }
 
     if (!digitalRead(BUTTON_PIN)) {

@@ -7,12 +7,16 @@
 
 #include "frame.h"
 
+#define FRAMES_NUM 20
+
 extern float initialPressure;
 extern float initialTemperature;
 
 void initFs();
 
-void appendDataFile(Frame frame);
+void appendDataFile(Frame *frame);
+
+void saveTask(void *pvParameter);
 
 void clearDataFile();
 
