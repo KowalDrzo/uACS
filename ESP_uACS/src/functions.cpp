@@ -35,9 +35,9 @@ void saveTask(void *pvParameter) {
 
     char tempDataAscii[200];
     for (int8_t j = 0; j < FRAMES_NUM; j ++) {
-        sprintf(tempDataAscii, "%d;%f;%f;%f;%d;%d;%f;%f;%f;%f\n",
-                framesCopy[j].time_ms, framesCopy[j].gyro_x, framesCopy[j].gyro_y,
-                framesCopy[j].gyro_z, framesCopy[j].angle1, framesCopy[j].angle2,
+        sprintf(tempDataAscii, "%d;%d;%d;%d;%d;%d;%f;%f;%f;%f\n",
+                framesCopy[j].time_ms, (int)framesCopy[j].gyro_x, (int)framesCopy[j].gyro_y,
+                (int)framesCopy[j].gyro_z, framesCopy[j].angle1, framesCopy[j].angle2,
                 framesCopy[j].acc_x, framesCopy[j].acc_y, framesCopy[j].acc_z, framesCopy[j].alt);
         file.write((uint8_t*) tempDataAscii, strlen(tempDataAscii));
     }
