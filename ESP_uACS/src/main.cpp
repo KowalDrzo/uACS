@@ -1,7 +1,3 @@
-#include <Arduino.h>
-#include <Wire.h>
-#include <SPI.h>
-#include <Adafruit_BMP085.h>
 #include <I2Cdev.h>
 #include <ITG3200.h>
 #include <Adafruit_Sensor.h>
@@ -13,10 +9,9 @@
 #include "functions.h"
 #include "filter.h"
 
-Adafruit_BMP085 bmp;
 ITG3200 gyro;
 int16_t gx, gy, gz;
-float press;
+float alt;
 sensors_event_t event;
 Adafruit_ADXL345_Unified accel;
 
@@ -27,7 +22,7 @@ PID pid(0.035, 0.002, 0.001);
 Filter filterX(0.2);
 Filter filterY(0.2);
 Filter filterZ(0.2);
-Filter filterPress(0.2);
+Filter filterAlt(0.2);
 
 uint32_t timer;
 
@@ -37,7 +32,7 @@ void setup() {
     delay(3000);
 
     Wire.begin(SDA_PIN, SCL_PIN, 400000);
-    bmp.begin(1);
+    bmp.begin(3);
     Serial.println(bmp.readPressure());
     gyro.initialize();
     gyro.testConnection();
@@ -56,6 +51,7 @@ void setup() {
 
     initialTemperature = bmp.readTemperature();
     initialPressure = bmp.readPressure();
+    xTaskCreate(baroTask, "Baro Task", 32768, NULL, 2, NULL);
 
     timer = millis();
 }
@@ -72,28 +68,21 @@ void loop() {
         float tableX[3];
         float tableY[3];
         float tableZ[3];
-        float tablePress[3];
+        float tableAlt[3];
 
         for (int8_t i = 0; i < 3; i++) {
             gyro.getRotation(&gx, &gy, &gz);
             tableX[i] = gx;
             tableY[i] = gy;
             tableZ[i] = gz;
-            tablePress[i] = initialPressure;
-        }
-        if (j == 0) {
-            uint32_t timer_save = millis();
-            tablePress[0] = bmp.readPressure();
-            tablePress[1] = tablePress[0];
-            tablePress[2] = tablePress[0];
-            Serial.println(millis() - timer_save);
+            tableAlt[i] = (initialTemperature+273.15)/0.0065*(1.0 - pow(baroPressure/initialPressure, 0.1903));
         }
 
         // Filtrowanie:
         gx = filterX.doFiltering3Vals(tableX);
         gy = filterY.doFiltering3Vals(tableY);
         gz = filterZ.doFiltering3Vals(tableZ);
-        press = filterPress.doFiltering3Vals(tablePress);
+        alt = filterAlt.doFiltering3Vals(tableAlt);
 
         // Skalowanie:
         gx /= 14.375;
@@ -103,7 +92,7 @@ void loop() {
         frames[j].gyro_x = gx;
         frames[j].gyro_y = gy;
         frames[j].gyro_z = gz;
-        frames[j].alt = (initialTemperature+273.15)/0.0065*(1.0 - pow(press/initialPressure, 0.1903));
+        frames[j].alt = alt;
 
         if (gy > -100 && gy < 100) gy = 0;
 
@@ -147,5 +136,5 @@ void loop() {
         else clearDataFile();
     }
 
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(3 / portTICK_PERIOD_MS);
 }
