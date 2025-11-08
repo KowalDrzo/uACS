@@ -4,7 +4,6 @@ float initialPressure = 1;
 float initialTemperature = -100;
 float baroPressure = 101325;
 
-Adafruit_BMP085 bmp;
 File file;
 
 void initFs() {
@@ -65,12 +64,4 @@ void readDataFile() {
     }
 
     file.close();
-}
-
-void baroTask(void *pvParameter) {
-
-    while (1) {
-        baroPressure = bmp.readPressure();
-        vTaskDelay(1);
-    }
 }

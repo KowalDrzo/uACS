@@ -1,7 +1,8 @@
-#include <I2Cdev.h>
-#include <ITG3200.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_ADXL345_U.h>
+#include <ICM42688.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_BMP5xx.h>
+
 #include <ESP32Servo.h>
 
 #include "pinout.h"
@@ -9,11 +10,11 @@
 #include "functions.h"
 #include "filter.h"
 
-ITG3200 gyro;
+ICM42688 imu(Wire, 0x69);
+Adafruit_BMP5xx bmp;
+
 int16_t gx, gy, gz;
 float alt;
-sensors_event_t event;
-Adafruit_ADXL345_Unified accel;
 
 Servo servo1, servo2;
 Frame frames[FRAMES_NUM];
@@ -32,12 +33,31 @@ void setup() {
     delay(3000);
 
     Wire.begin(SDA_PIN, SCL_PIN, 400000);
-    bmp.begin(3);
-    Serial.println(bmp.readPressure());
-    gyro.initialize();
-    gyro.testConnection();
-    accel.begin();
-    accel.setRange(ADXL345_RANGE_16_G);
+
+    int status = imu.begin();
+    if (status < 0) {
+        Serial.println("IMU initialization unsuccessful");
+        Serial.println("Check IMU wiring or try cycling power");
+        Serial.print("Status: ");
+        Serial.println(status);
+        while(1) {}
+    }
+
+    imu.setAccelFS(ICM42688::gpm16);
+    imu.setGyroFS(ICM42688::dps2000);
+    imu.setAccelODR(ICM42688::odr2k);
+    imu.setGyroODR(ICM42688::odr2k);
+
+    if(!bmp.begin(BMP5XX_ALTERNATIVE_ADDRESS, &Wire)) {
+        Serial.println("BMP Error");
+        while(1) {}
+    }
+
+    bmp.setTemperatureOversampling(BMP5XX_OVERSAMPLING_2X);
+    bmp.setPressureOversampling(BMP5XX_OVERSAMPLING_16X);
+    bmp.setIIRFilterCoeff(BMP5XX_IIR_FILTER_COEFF_3);
+    bmp.setOutputDataRate(BMP5XX_ODR_10_HZ);
+    bmp.enablePressure(true);
 
     pinMode(BUTTON_PIN, INPUT_PULLUP);
 
@@ -49,9 +69,9 @@ void setup() {
 
     initFs();
 
-    initialTemperature = bmp.readTemperature();
-    initialPressure = bmp.readPressure();
-    xTaskCreate(baroTask, "Baro Task", 32768, NULL, 2, NULL);
+    bmp.performReading();
+    initialTemperature = bmp.temperature;
+    initialPressure = bmp.pressure;
 
     timer = millis();
 }
@@ -71,12 +91,20 @@ void loop() {
         float tableAlt[3];
 
         for (int8_t i = 0; i < 3; i++) {
-            gyro.getRotation(&gx, &gy, &gz);
-            tableX[i] = gx;
-            tableY[i] = gy;
-            tableZ[i] = gz;
+
+            imu.getAGT();
+
+            tableX[i] = imu.gyrX();
+            tableY[i] = imu.gyrY();
+            tableZ[i] = imu.gyrZ();
+            baroPressure = bmp.readPressure();
+
             tableAlt[i] = (initialTemperature+273.15)/0.0065*(1.0 - pow(baroPressure/initialPressure, 0.1903));
         }
+
+        frames[j].acc_x = imu.accX();
+        frames[j].acc_y = imu.accY();
+        frames[j].acc_z = imu.accZ();
 
         // Filtrowanie:
         gx = filterX.doFiltering3Vals(tableX);
@@ -84,7 +112,7 @@ void loop() {
         gz = filterZ.doFiltering3Vals(tableZ);
         alt = filterAlt.doFiltering3Vals(tableAlt);
 
-        // Skalowanie:
+        // Skalowanie: TODO
         gx /= 14.375;
         gy /= 14.375;
         gz /= 14.375;
@@ -94,7 +122,7 @@ void loop() {
         frames[j].gyro_z = gz;
         frames[j].alt = alt;
 
-        if (gy > -100 && gy < 100) gy = 0;
+        //if (gy > -100 && gy < 100) gy = 0; TODO
 
         float setpoint = 0.0;  // Wartość zadana
         float actual = gy;     // Wartość aktualna
@@ -114,12 +142,7 @@ void loop() {
         frames[j].angle1 = angle;
         frames[j].angle2 = angle;
 
-        accel.getEvent(&event);
-        frames[j].acc_x = event.acceleration.x;
-        frames[j].acc_y = event.acceleration.y;
-        frames[j].acc_z = event.acceleration.z;
-
-        if (j >= FRAMES_NUM - 1) appendDataFile(frames);
+        //if (j >= FRAMES_NUM - 1) appendDataFile(frames); TODO
 
         j++;
         if (j >= FRAMES_NUM) j = 0;
@@ -136,5 +159,5 @@ void loop() {
         else clearDataFile();
     }
 
-    vTaskDelay(3 / portTICK_PERIOD_MS);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
 }

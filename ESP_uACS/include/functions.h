@@ -6,7 +6,6 @@
 #include <SPIFFS.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <Adafruit_BMP085.h>
 
 #include "frame.h"
 
@@ -15,7 +14,6 @@
 extern float initialPressure;
 extern float initialTemperature;
 extern float baroPressure;
-extern Adafruit_BMP085 bmp;
 
 void initFs();
 
@@ -26,7 +24,5 @@ void saveTask(void *pvParameter);
 void clearDataFile();
 
 void readDataFile();
-
-void baroTask(void *pvParameter);
 
 #endif
